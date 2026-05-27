@@ -229,28 +229,124 @@ def analyze(
 # --------------------------------------------------------------------------- #
 
 def launch_gui():  # pragma: no cover - requires a display
+    import calendar
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
+
+    class DateTimePicker(ttk.Frame):
+        """Visual date/time chooser using spinboxes - no typing of a fixed
+        format required.  Year / Month / Day / Hour / Minute / Second each have
+        up/down arrows.  ``on_change`` is fired whenever any field changes so the
+        owner can re-validate live.
+        """
+
+        MONTHS = list(calendar.month_abbr)[1:]  # Jan..Dec
+
+        def __init__(self, master, on_change=None):
+            super().__init__(master)
+            self._on_change = on_change
+            now = datetime.now()
+
+            self.year = tk.IntVar(value=now.year)
+            self.month = tk.IntVar(value=now.month)
+            self.day = tk.IntVar(value=now.day)
+            self.hour = tk.IntVar(value=now.hour)
+            self.minute = tk.IntVar(value=now.minute)
+            self.second = tk.IntVar(value=0)
+
+            self._spins = []
+
+            def add(label, var, frm, to, width=4, fmt=None):
+                ttk.Label(self, text=label).pack(side="left", padx=(6, 1))
+                sb = ttk.Spinbox(self, from_=frm, to=to, textvariable=var,
+                                 width=width, wrap=True, command=self._changed)
+                if fmt:
+                    sb.configure(format=fmt)
+                sb.pack(side="left")
+                var.trace_add("write", lambda *_: self._changed())
+                self._spins.append(sb)
+                return sb
+
+            add("Y", self.year, 2000, 2100, width=5)
+            # Month shown as number but kept simple/robust.
+            add("M", self.month, 1, 12, width=3)
+            self._day_spin = add("D", self.day, 1, 31, width=3)
+            add("H", self.hour, 0, 23, width=3)
+            add("Min", self.minute, 0, 59, width=3)
+            add("Sec", self.second, 0, 59, width=3)
+
+            ttk.Button(self, text="Now", width=5,
+                       command=self.set_now).pack(side="left", padx=(8, 0))
+
+        def _clamp_day(self):
+            """Keep the day within the selected month's valid range."""
+            try:
+                max_day = calendar.monthrange(self.year.get(), self.month.get())[1]
+            except (tk.TclError, ValueError):
+                return
+            self._day_spin.configure(to=max_day)
+            if self.day.get() > max_day:
+                self.day.set(max_day)
+
+        def _changed(self):
+            self._clamp_day()
+            if self._on_change:
+                self._on_change()
+
+        def set_now(self):
+            now = datetime.now()
+            self.year.set(now.year)
+            self.month.set(now.month)
+            self.day.set(now.day)
+            self.hour.set(now.hour)
+            self.minute.set(now.minute)
+            self.second.set(now.second)
+
+        def set_enabled(self, enabled: bool):
+            state = "normal" if enabled else "disabled"
+            for sb in self._spins:
+                sb.configure(state=state)
+
+        def get_datetime(self) -> datetime:
+            """Build a datetime from the fields; raises ValueError if invalid."""
+            return datetime(
+                int(self.year.get()), int(self.month.get()), int(self.day.get()),
+                int(self.hour.get()), int(self.minute.get()), int(self.second.get()),
+            )
 
     class AlarmGUI:
         def __init__(self, root):
             self.root = root
             self.root.title("NOC Alarm Activity Analyzer")
-            self.root.geometry("1200x650")
+            self.root.geometry("1200x720")
+            self.files: list[str] = []
             self.raw_df: pd.DataFrame | None = None
             self.result_df: pd.DataFrame | None = None
             self._build()
+            self._validate()
 
         def _build(self):
             # --- Menu bar ---
             menubar = tk.Menu(self.root)
             filemenu = tk.Menu(menubar, tearoff=0)
-            filemenu.add_command(label="Import alarm file(s)...", command=self.import_files)
+            filemenu.add_command(label="Add alarm file(s)...", command=self.import_files)
+            filemenu.add_command(label="Clear imported files", command=self.clear_files)
+            filemenu.add_separator()
             filemenu.add_command(label="Export result to CSV...", command=self.export_csv)
             filemenu.add_separator()
             filemenu.add_command(label="Exit", command=self.root.quit)
             menubar.add_cascade(label="File", menu=filemenu)
             self.root.config(menu=menubar)
+
+            # --- Imported files panel ---
+            files_frame = ttk.LabelFrame(self.root, text="Imported files (select multiple at once, or add more)")
+            files_frame.pack(fill="x", padx=8, pady=6)
+            btns = ttk.Frame(files_frame)
+            btns.pack(side="left", fill="y", padx=4, pady=4)
+            ttk.Button(btns, text="Add file(s)...", command=self.import_files).pack(fill="x", pady=2)
+            ttk.Button(btns, text="Clear", command=self.clear_files).pack(fill="x", pady=2)
+            self.files_list = tk.Listbox(files_frame, height=3)
+            self.files_list.pack(side="left", fill="both", expand=True, padx=4, pady=4)
 
             # --- Query controls ---
             ctrl = ttk.LabelFrame(self.root, text="Query")
@@ -262,17 +358,21 @@ def launch_gui():  # pragma: no cover - requires a display
             ttk.Radiobutton(ctrl, text="Time range", value="range",
                             variable=self.mode, command=self._toggle_mode).grid(row=0, column=1, padx=4, pady=4, sticky="w")
 
-            ttk.Label(ctrl, text="Start / Point (YYYY-MM-DD HH:MM:SS):").grid(row=1, column=0, padx=4, sticky="e")
-            self.start_var = tk.StringVar()
-            ttk.Entry(ctrl, textvariable=self.start_var, width=24).grid(row=1, column=1, padx=4, sticky="w")
+            ttk.Label(ctrl, text="Start / Point:").grid(row=1, column=0, padx=4, sticky="e")
+            self.start_picker = DateTimePicker(ctrl, on_change=self._validate)
+            self.start_picker.grid(row=1, column=1, padx=4, pady=2, sticky="w")
 
-            self.end_label = ttk.Label(ctrl, text="End (YYYY-MM-DD HH:MM:SS):")
-            self.end_label.grid(row=1, column=2, padx=4, sticky="e")
-            self.end_var = tk.StringVar()
-            self.end_entry = ttk.Entry(ctrl, textvariable=self.end_var, width=24)
-            self.end_entry.grid(row=1, column=3, padx=4, sticky="w")
+            self.end_label = ttk.Label(ctrl, text="End:")
+            self.end_label.grid(row=2, column=0, padx=4, sticky="e")
+            self.end_picker = DateTimePicker(ctrl, on_change=self._validate)
+            self.end_picker.grid(row=2, column=1, padx=4, pady=2, sticky="w")
 
-            ttk.Button(ctrl, text="Analyze", command=self.run_analysis).grid(row=1, column=4, padx=10)
+            self.analyze_btn = ttk.Button(ctrl, text="Analyze", command=self.run_analysis)
+            self.analyze_btn.grid(row=1, column=2, rowspan=2, padx=12)
+
+            self.valid_lbl = ttk.Label(ctrl, text="", anchor="w")
+            self.valid_lbl.grid(row=3, column=0, columnspan=3, padx=4, sticky="w")
+
             self._toggle_mode()
 
             self.status = ttk.Label(self.root, text="No data imported.", anchor="w")
@@ -293,42 +393,92 @@ def launch_gui():  # pragma: no cover - requires a display
 
         def _toggle_mode(self):
             is_range = self.mode.get() == "range"
-            state = "normal" if is_range else "disabled"
-            self.end_entry.configure(state=state)
+            self.end_picker.set_enabled(is_range)
+            self.end_label.configure(state="normal" if is_range else "disabled")
+            self._validate()
+
+        def _validate(self):
+            """Live-check the inputs; disables Analyze on invalid range."""
+            try:
+                start = self.start_picker.get_datetime()
+            except (ValueError, tk.TclError):
+                self.valid_lbl.config(text="Start date/time is invalid.", foreground="red")
+                self.analyze_btn.state(["disabled"])
+                return None, None
+            if self.mode.get() != "range":
+                self.valid_lbl.config(
+                    text=f"Point query: {start:%Y-%m-%d %H:%M:%S}", foreground="green")
+                self.analyze_btn.state(["!disabled"])
+                return start, None
+            try:
+                end = self.end_picker.get_datetime()
+            except (ValueError, tk.TclError):
+                self.valid_lbl.config(text="End date/time is invalid.", foreground="red")
+                self.analyze_btn.state(["disabled"])
+                return None, None
+            if end < start:
+                self.valid_lbl.config(
+                    text="End time is earlier than start time - adjust the values.",
+                    foreground="red")
+                self.analyze_btn.state(["disabled"])
+                return None, None
+            if end == start:
+                self.valid_lbl.config(
+                    text="Start and end are identical - widen the range.",
+                    foreground="red")
+                self.analyze_btn.state(["disabled"])
+                return None, None
+            self.valid_lbl.config(
+                text=f"Range: {start:%Y-%m-%d %H:%M:%S}  ->  {end:%Y-%m-%d %H:%M:%S}",
+                foreground="green")
+            self.analyze_btn.state(["!disabled"])
+            return start, end
 
         def import_files(self):
             paths = filedialog.askopenfilenames(
-                title="Select alarm export file(s)",
+                title="Select one or more alarm export files",
                 filetypes=[("Alarm exports", "*.xlsx *.xls *.csv"), ("All files", "*.*")],
             )
             if not paths:
                 return
+            new = [p for p in paths if p not in self.files]
+            self.files.extend(new)
+            self._reload()
+
+        def clear_files(self):
+            self.files = []
+            self.raw_df = None
+            self._reload()
+
+        def _reload(self):
+            self.files_list.delete(0, tk.END)
+            for p in self.files:
+                self.files_list.insert(tk.END, os.path.basename(p))
+            if not self.files:
+                self.raw_df = None
+                self.status.config(text="No data imported.")
+                self.tree.delete(*self.tree.get_children())
+                return
             try:
-                self.raw_df = load_alarms(list(paths))
+                self.raw_df = load_alarms(self.files)
                 resolve_columns(self.raw_df)  # validate anchors early
             except Exception as exc:
                 messagebox.showerror("Import error", str(exc))
                 self.raw_df = None
                 return
             self.status.config(
-                text=f"Imported {len(self.raw_df)} alarm row(s) from {len(paths)} file(s)."
-            )
+                text=f"Imported {len(self.raw_df)} alarm row(s) from {len(self.files)} file(s).")
             self._show(self.raw_df)
 
         def run_analysis(self):
             if self.raw_df is None or self.raw_df.empty:
-                messagebox.showwarning("No data", "Import alarm data first.")
+                messagebox.showwarning("No data", "Add alarm data first.")
                 return
-            start = parse_datetime(self.start_var.get())
+            start, end = self._validate()
             if start is None:
-                messagebox.showerror("Invalid input", "Enter a valid start/point time.")
+                messagebox.showerror("Invalid input",
+                                     "Fix the highlighted date/time problem first.")
                 return
-            end = None
-            if self.mode.get() == "range":
-                end = parse_datetime(self.end_var.get())
-                if end is None:
-                    messagebox.showerror("Invalid input", "Enter a valid end time for range query.")
-                    return
             try:
                 self.result_df = analyze(self.raw_df, start, end)
             except Exception as exc:
@@ -337,8 +487,7 @@ def launch_gui():  # pragma: no cover - requires a display
             scope = "point" if end is None else "range"
             self.status.config(
                 text=f"{len(self.result_df)} alarm(s) active in {scope} query. "
-                     f"Use File > Export to save."
-            )
+                     f"Use File > Export to save.")
             self._show(self.result_df)
 
         def _show(self, df: pd.DataFrame):

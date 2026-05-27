@@ -6,10 +6,17 @@ based on history and/or active alarm exports from network elements.
 
 ## Features
 
-1. **Import** one or more alarm export files (`.xlsx`, `.xls`, `.csv`). Files
-   with different column layouts are merged (column union), and a `Source File`
+1. **Import** one or more alarm export files (`.xlsx`, `.xls`, `.csv`). You can
+   select several files at once, and **add more later** — they accumulate, and a
+   panel lists everything loaded (use **Clear** to start over). Files with
+   different column layouts are merged (column union), and a `Source File`
    column records where each row came from.
 2. **Query** by either a single point in time, or a time range (start + end).
+   Dates and times are chosen with **up/down spinboxes** (Year, Month, Day,
+   Hour, Minute, Second) and a **Now** button — no need to type an exact text
+   format. The day field auto-limits to the valid days for the chosen month.
+   When using a range, the tool **blocks an end time earlier than (or equal to)
+   the start time** and disables the Analyze button until the range is valid.
 3. **Range remarks** — for range queries, each matched alarm is annotated to
    show whether it *occurred midway*, *cleared midway*, both, was *still active
    / uncleared*, or *active throughout the window*.
@@ -119,11 +126,14 @@ Wait until it finishes (you will see lots of text, ending with something like
 python alarm_analyzer.py
 ```
 
-1. **File > Import alarm file(s)...** — select one or more exports.
+1. **Add file(s)...** (button or **File > Add alarm file(s)...**) — select one or
+   more exports. Repeat to add more files; they appear in the *Imported files*
+   list. Use **Clear** to remove them all.
 2. Choose **Single point** or **Time range**.
-3. Enter the time(s) as `YYYY-MM-DD HH:MM:SS` (e.g. `2026-01-15 14:30:00`).
-   The time portion may be omitted seconds, and a few other common formats are
-   accepted automatically.
+3. Set the date and time with the spinbox arrows (or click **Now** to fill in the
+   current time). In range mode, set both Start and End — the status line turns
+   green when valid and red (with Analyze disabled) if the end is not after the
+   start.
 4. Click **Analyze** to display the alarms active in that period.
 5. **File > Export result to CSV...** — save the displayed result.
 
