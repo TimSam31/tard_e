@@ -33,6 +33,86 @@ pip install pandas openpyxl
 sudo apt-get install python3-tk
 ```
 
+## Windows step-by-step (for beginners)
+
+If you have never run a Python program before, follow these steps exactly. You
+only need to do Steps 1–3 once; after that, running the program is just Step 4.
+
+### Step 1 — Install Python
+
+1. Open your web browser and go to <https://www.python.org/downloads/windows/>.
+2. Click the big yellow **Download Python 3.x.x** button (any 3.9 or newer is
+   fine).
+3. Open the file you just downloaded (it will be named something like
+   `python-3.12.x-amd64.exe`).
+4. **IMPORTANT:** On the first install screen, tick the checkbox at the bottom
+   that says **"Add python.exe to PATH"**. This step is easy to miss and the
+   program will not work without it.
+5. Click **Install Now** and wait for it to finish, then click **Close**.
+
+> Tkinter (the part that draws the window) is included automatically with the
+> official Python installer on Windows — you do not need to install it
+> separately.
+
+### Step 2 — Open the Command Prompt
+
+1. Press the **Windows key** on your keyboard.
+2. Type `cmd` and press **Enter**. A black window titled *Command Prompt*
+   opens. This is where you type the commands below.
+3. To check Python installed correctly, type the following and press **Enter**:
+
+   ```bat
+   python --version
+   ```
+
+   You should see something like `Python 3.12.x`. If instead you see an error
+   or the Microsoft Store opens, Python was not added to PATH — re-run Step 1
+   and make sure the **"Add python.exe to PATH"** box is ticked.
+
+### Step 3 — Install the required add-ons
+
+In the same Command Prompt window, type this and press **Enter**:
+
+```bat
+pip install pandas openpyxl
+```
+
+Wait until it finishes (you will see lots of text, ending with something like
+*Successfully installed ...*). You only need to do this once.
+
+### Step 4 — Run the program
+
+1. Put `alarm_analyzer.py` in an easy-to-find folder, for example your
+   **Downloads** folder.
+2. In the Command Prompt, move into that folder. For the Downloads folder type:
+
+   ```bat
+   cd %USERPROFILE%\Downloads
+   ```
+
+   (If you saved it somewhere else, type `cd ` followed by the folder path.)
+3. Start the program by typing:
+
+   ```bat
+   python alarm_analyzer.py
+   ```
+
+4. The **NOC Alarm Activity Analyzer** window opens. Continue with the
+   [Usage](#usage) steps below.
+
+> **Tip:** To run it again next time, just repeat Step 2 (open Command Prompt),
+> then Step 4. Steps 1 and 3 do not need to be repeated.
+
+### Common problems on Windows
+
+| What you see                                   | What to do                                                                 |
+| ---------------------------------------------- | -------------------------------------------------------------------------- |
+| `'python' is not recognized ...`               | Python is not on PATH. Reinstall (Step 1) and tick **Add python.exe to PATH**. |
+| `'pip' is not recognized ...`                  | Try `python -m pip install pandas openpyxl` instead.                       |
+| The Microsoft Store opens when you type `python` | Reinstall from python.org (Step 1) with the PATH box ticked.             |
+| `No module named 'pandas'` / `'openpyxl'`      | Re-run Step 3.                                                             |
+| Nothing happens / no window appears            | Make sure you are in the right folder (Step 4.2) and the file name is exactly `alarm_analyzer.py`. |
+
 ## Usage
 
 ```bash
